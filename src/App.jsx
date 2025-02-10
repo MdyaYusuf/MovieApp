@@ -1,15 +1,18 @@
 import { useEffect, useState } from "react";
 import StarRating from './StarRating.jsx';
+import useMovies from "./hooks/useMovies.jsx";
+import useMovieDetails from "./hooks/useMovieDetails.jsx";
 
 const getAverage = (array) => array.reduce((sum, value) => sum + value, 0) / array.length;
 
+const api_key = "insert some key here";
+
 export default function App() {
   const [query, setQuery] = useState("");
-  const [movies, setMovies] = useState([]);
   const [selectedMovies, setSelectedMovies] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
   const [selectedMovie, setSelectedMovie] = useState(null);
+
+  const { movies, loading, error, currentPage, totalPages, total_results, nextPage, previousPage } = useMovies(query);
 
   function handleSelectedMovie(id) {
     setSelectedMovie(selectedMovie => id === selectedMovie ? null : id);
@@ -28,66 +31,35 @@ export default function App() {
     setSelectedMovies(selectedMovies => selectedMovies.filter(m => m.id !== id));
   }
 
-  useEffect(function () {
-    const controller = new AbortController();
-    const signal = controller.signal;
-    
-    async function getMovies() {
-      try {
-        setLoading(true);
-        setError("");
-
-        const res = await fetch(`https://api.themoviedb.org/3/search/movie?api_key=${api_key}&query=${query}`, { signal: signal });
-
-        if (res.ok) {
-          throw new Error("Bilinmeyen bir hata oluştu.");
-        }
-
-        const data = await res.json();
-
-        if (data.total_results === 0) {
-          throw new Error("Film bulunamadı.")
-        }
-        setMovies(data.results);
-      }
-      catch (err) {
-        if (err.name === "AbortError") {
-          console.log("aborted...");
-        } else {
-          setError(err.message);
-        }
-      }
-      setLoading(false);
-    }
-
-    if (query.length < 4) {
-      setMovies([]);
-      setError("");
-      return;
-    }
-
-    getMovies();
-
-    return () => {
-      controller.abort();
-    }
-  }, [query]);
-
-  const api_key = "insert some key here";
-
   return (
     <>
       <Nav>
         <Logo />
         <Search query={query} setQuery={setQuery} />
-        <NavSearchResult movies={movies} onSelectMovie={handleSelectedMovie} />
+        <NavSearchResult totalResults={totalResults} onSelectMovie={handleSelectedMovie} />
       </Nav>
       <Main>
         <div className="row mt-2">
           <div className="col-md-9">
             <ListContainer>
               {loading && <Loading />}
-              {!loading && !errorr && <MovieList movies={movies} onSelectMovie={handleSelectedMovie} selectedMovie={selectedMovie} />}
+              {!loading && !error && (
+                <>
+                  {
+                    movies.length > 0 && (
+                      <>
+                        <MovieList movies={movies} onSelectMovie={handleSelectedMovie} selectedMovie={selectedMovie} />
+                        <Pagination
+                          nextPage={nextPage}
+                          previousPage={previousPage}
+                          currentPage={currentPage}
+                          totalPages={totalPages}
+                        />
+                      </>
+                    )
+                  }
+                </>
+              )}
               {error && <ErrorMessage message={error} />}
             </ListContainer>
           </div>
@@ -109,6 +81,21 @@ export default function App() {
         </div>
       </Main>
     </>
+  );
+}
+
+function Pagination({ nextPage, previousPage, currentPage, totalPages }) {
+  return (
+    <nav>
+      <ul className="pagination d-flex justify-content-between">
+        <li className={currentPage != 1 ? "page-item" : "page-item disabled"}>
+          <a className="page-link" href="#" onClick={previousPage}>Geri</a>
+        </li>
+        <li>
+          <a className={currentPage < totalPages ? "page-item" : "page-item disabled"} href="#" onClick={nextPage}>İleri</a>
+        </li>
+      </ul>
+    </nav>
   );
 }
 
@@ -155,11 +142,11 @@ function Search({ query, setQuery }) {
   );
 }
 
-function NavSearchResult({ movies }) {
+function NavSearchResult({ total_results }) {
 
   return (
     <div className="col-4 text-end">
-      <strong>{movies.length}</strong> kayıt bulundu.
+      <strong>{total_results}</strong> kayıt bulundu.
     </div>
   );
 }
@@ -201,9 +188,9 @@ function MovieList({ movies, onSelectMovie, selectedMovie }) {
 
 function MovieDetails({ selectedMovie, onUnSelectMovie, onAddToList, selectedMovies }) {
 
-  const [movie, setMovie] = useState({});
-  const [loading, setLoading] = useState(false);
   const [userRating, setUserRating] = useState("");
+
+  const { movie, loading } = useMovieDetails(selectedMovie);
 
   const isAddedToList = selectedMovies.map(m => m.id).includes(selectedMovie);
   const selectedMovieUserRating = selectedMovies.find(m => m.id === selectedMovie)?.userRating;
@@ -215,17 +202,6 @@ function MovieDetails({ selectedMovie, onUnSelectMovie, onAddToList, selectedMov
     }
     onAddToList(newMovie);
   }
-
-  useEffect(function () {
-    async function getMovieDetails() {
-      setLoading(true);
-      const response = await fetch(`https://api.themoviedb.org/3/movie/${selectedMovie}?api_key=${api_key}`);
-      const data = await res.json();
-      setMovie(data);
-      setLoading(false);
-    }
-    getMovieDetails();
-  }, [selectedMovie])
 
   return (
     <>
